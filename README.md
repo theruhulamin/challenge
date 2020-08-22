@@ -2,7 +2,7 @@
 
 ## Feature implemented:
 
-1. End point to transfer of money between accounts is created. Request payload to transfer money includes following attributes:
+1. End point to transfer money between accounts is created. Request payload to transfer money includes following attributes:
 * accountFrom id
 * accountTo id
 * amount to transfer between accounts
