@@ -11,24 +11,22 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
-public class AmountTransfer {
+public class AmountTransferRequest {
+	@NotNull(message = "Sender account no. cannot be null")
+	private String accountFrom;
+
+	@NotNull(message = "Receiver account no. cannot be null")
+	private String accountTo;
 
 	@NotNull
-	private String accountFrom;
-	
-	@NotNull
-	private String accountTo;
-	
-	@NotNull
-	@Min(value = 0, message = "Initial balance must be positive.")
+	@Min(value = 0, message = "Amount to transfer must be positive.")
 	private BigDecimal transferAmount;
-	
+
 	@JsonCreator
-	public AmountTransfer(@JsonProperty("accountFrom") String accountFrom,
-			@JsonProperty("accountTo") String accountTo,
-	    @JsonProperty("transferAmount") BigDecimal transferAmount) {
+	public AmountTransferRequest(@JsonProperty("accountFrom") String accountFrom,
+			@JsonProperty("accountTo") String accountTo, @JsonProperty("transferAmount") BigDecimal transferAmount) {
 		this.accountFrom = accountFrom;
 		this.accountTo = accountTo;
-	    this.transferAmount = transferAmount;
+		this.transferAmount = transferAmount;
 	}
 }

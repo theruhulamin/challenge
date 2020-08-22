@@ -3,12 +3,9 @@ package com.db.awmd.challenge;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
 
-import com.db.awmd.challenge.domain.Account;
-import com.db.awmd.challenge.exception.DuplicateAccountIdException;
-import com.db.awmd.challenge.service.AccountsService;
-import com.db.awmd.challenge.service.NotificationService;
-
 import java.math.BigDecimal;
+
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -16,6 +13,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.junit4.SpringRunner;
+
+import com.db.awmd.challenge.domain.Account;
+import com.db.awmd.challenge.exception.DuplicateAccountIdException;
+import com.db.awmd.challenge.service.AccountsService;
+import com.db.awmd.challenge.service.NotificationService;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
@@ -26,6 +28,12 @@ public class AccountsServiceTest {
 
 	@MockBean
 	private NotificationService notificationService;
+
+	@Before
+	public void prepare() {
+		// Reset the existing accounts before each test.
+		accountsService.getAccountsRepository().clearAccounts();
+	}
 
 	@Test
 	public void addAccount() throws Exception {
@@ -52,7 +60,7 @@ public class AccountsServiceTest {
 	}
 
 	@Test
-	public void amountTransfer_TransactionCommit() throws Exception {
+	public void amountTransfer_TransactionSuccess() throws Exception {
 		Mockito.doNothing().when(notificationService).notifyAboutTransfer(Mockito.any(Account.class),
 				Mockito.anyString());
 		Account accountFrom = new Account("Id-341");
@@ -70,7 +78,23 @@ public class AccountsServiceTest {
 	}
 
 	@Test
-	public void amountTransfer_TransactionRollBack() throws Exception {
+	public void amountTransfer_TransactionOnSameAccount() throws Exception {
+		// make transfer To an Account which do not exist
+		Account accountFrom = new Account("Id-360");
+		accountFrom.setBalance(new BigDecimal(1000));
+		this.accountsService.createAccount(accountFrom);
+		try {
+			this.accountsService.amountTransfer("Id-360", "Id-360", new BigDecimal(500));
+		} catch (Exception e) {
+			assertThat(e.getMessage()).isEqualTo("Accounts should be different");
+		}
+		// Transaction will be rollBack and no debit will happen
+		assertThat(this.accountsService.getAccount("Id-360").getBalance()).isEqualTo(new BigDecimal(1000));
+
+	}
+
+	@Test
+	public void amountTransfer_TransactionInsufficientBalance() throws Exception {
 		Account accountFrom = new Account("Id-350");
 		accountFrom.setBalance(new BigDecimal(1000));
 		this.accountsService.createAccount(accountFrom);
@@ -83,16 +107,16 @@ public class AccountsServiceTest {
 			// make transfer when balance insufficient
 			this.accountsService.amountTransfer("Id-350", "Id-351", new BigDecimal(500));
 		} catch (Exception e) {
-			assertThat(e.getMessage()).isEqualTo("Insufficient balance in account");
+			assertThat(e.getMessage()).isEqualTo("Insufficient funds");
 		}
-		// Transaction will be rollBack and no account will be updated
+
 		assertThat(this.accountsService.getAccount("Id-350").getBalance()).isEqualTo(BigDecimal.ZERO);
 		assertThat(this.accountsService.getAccount("Id-351").getBalance()).isEqualTo(new BigDecimal(2000));
 
 	}
 
 	@Test
-	public void amountTransfer_TransactionRollBackOnNonExistingAccount() throws Exception {
+	public void amountTransfer_TransactionOnNonExistingAccount() throws Exception {
 		// make transfer To an Account which do not exist
 		Account accountFrom = new Account("Id-360");
 		accountFrom.setBalance(new BigDecimal(1000));
@@ -100,7 +124,7 @@ public class AccountsServiceTest {
 		try {
 			this.accountsService.amountTransfer("Id-360", "Id-361", new BigDecimal(500));
 		} catch (Exception e) {
-			assertThat(e.getMessage()).isEqualTo("Account does not exist");
+			assertThat(e.getMessage()).isEqualTo("Receiver account no. is not found");
 		}
 		// Transaction will be rollBack and no debit will happen
 		assertThat(this.accountsService.getAccount("Id-360").getBalance()).isEqualTo(new BigDecimal(1000));

@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import com.db.awmd.challenge.domain.Account;
 import com.db.awmd.challenge.exception.AmountTransferException;
 import com.db.awmd.challenge.repository.AccountsRepository;
-import com.db.awmd.challenge.transaction.AccountTransactionManager;
 
 import lombok.Getter;
 
@@ -18,80 +17,40 @@ public class AccountsService {
 	@Getter
 	private final AccountsRepository accountsRepository;
 
-	private AccountTransactionManager transactionManager;
-
 	@Autowired
 	private NotificationService emailNotifyService;
 
 	@Autowired
 	public AccountsService(AccountsRepository accountsRepository) {
 		this.accountsRepository = accountsRepository;
-		this.transactionManager = new AccountTransactionManager(accountsRepository);
 	}
 
 	public void createAccount(Account account) {
 		this.accountsRepository.createAccount(account);
 	}
 
-	public Account getAccount(String accountId) {
-		return this.accountsRepository.getAccount(accountId);
+	public Account getAccount(String accountNo) {
+		return this.accountsRepository.getAccount(accountNo);
 	}
 
-	// @Transactional(propagation=Propagation.REQUIRED, readOnly=false,
-	// rollbackFor=AmountTransferException.class)
 	public void amountTransfer(final String fromAccount, final String toAccount, final BigDecimal transferAmount)
 			throws AmountTransferException {
 
-		transactionManager.doInTransaction(() -> {
-
-			this.debit(fromAccount, transferAmount);
-			this.credit(toAccount, transferAmount);
-		});
-
-		transactionManager.commit();
-		notifyEmail(fromAccount, toAccount, transferAmount);
-	}
-
-	private Account debit(String accountId, BigDecimal amount) throws AmountTransferException {
-		// take repository from transaction manager in order to manage transactions and
-		// rollBack.
-		// But, This method will only be transactional only if this is called within
-		// "transactionManager.doInTransaction()
-		// OR method annotated with @AccountTransaction.
-		final Account account = transactionManager.getRepoProxy().getAccount(accountId);
-		if (account == null) {
-			throw new AmountTransferException("Account does not exist");
+		synchronized (this) {
+			this.accountsRepository.amountTransfer(fromAccount, toAccount, transferAmount);
+			notifyEmail(fromAccount, toAccount, transferAmount);
 		}
-		if (account.getBalance().compareTo(amount) == -1) {
-			throw new AmountTransferException("Insufficient balance in account");
-		}
-		BigDecimal bal = account.getBalance().subtract(amount);
-		account.setBalance(bal);
-		return account;
 	}
-
-	private Account credit(String accountId, BigDecimal amount) throws AmountTransferException {
-		// take repository from transaction manager in order to manage transactions and
-		// rollBack.
-		// But, This method will only be transactional only if this is called within
-		// "transactionManager.doInTransaction()
-		// OR method annotated with @AccountTransaction.
-		final Account account = transactionManager.getRepoProxy().getAccount(accountId);
-		if (account == null) {
-			throw new AmountTransferException("Account does not exist");
-		}
-		BigDecimal bal = account.getBalance().add(amount);
-		account.setBalance(bal);
-		return account;
-	}
-
-	// method to send notification to both account holders, with a message
-	// containing id of the other account an amount transferred.
-	public boolean notifyEmail(String fromAccount, String toAccount, BigDecimal transferAmount) {
-		emailNotifyService.notifyAboutTransfer(this.accountsRepository.getAccount(fromAccount),
-				transferAmount + " is transfered to " + toAccount);
-		emailNotifyService.notifyAboutTransfer(this.accountsRepository.getAccount(toAccount),
-				transferAmount + " is debited from " + fromAccount);
-		return true;
+/**
+ * notifyEmail method to send email notification
+ * @param fromAccount
+ * @param toAccount
+ * @param transferAmount
+ */
+	public void notifyEmail(String fromAccountNo, String toAccountNo, BigDecimal transferAmount) {
+		emailNotifyService.notifyAboutTransfer(this.accountsRepository.getAccount(fromAccountNo),
+				transferAmount + " is transfered to " + toAccountNo);
+		emailNotifyService.notifyAboutTransfer(this.accountsRepository.getAccount(toAccountNo),
+				transferAmount + " is debited from " + fromAccountNo);
 	}
 }
